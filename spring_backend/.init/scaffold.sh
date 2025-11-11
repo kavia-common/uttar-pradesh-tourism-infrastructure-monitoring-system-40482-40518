@@ -1,23 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
-WS="/home/kavia/workspace/code-generation/uttar-pradesh-tourism-infrastructure-monitoring-system-40482-40518/spring_backend"
-mkdir -p "$WS" && cd "$WS"
-# Minimal pom.xml
-cat > pom.xml <<'POM'
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+WORKSPACE="/home/kavia/workspace/code-generation/uttar-pradesh-tourism-infrastructure-monitoring-system-40482-40518/spring_backend"
+SPRING_BOOT_VERSION=${SPRING_BOOT_VERSION:-3.1.11}
+cd "$WORKSPACE"
+mkdir -p "$WORKSPACE"
+# If pom.xml already exists, do not overwrite
+if [ -f pom.xml ]; then
+  # derive groupId for potential test scaffolding later
+  exit 0
+fi
+cat > pom.xml <<POM
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>org.example</groupId>
+  <groupId>dev.container</groupId>
   <artifactId>spring-backend</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-  <parent>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.2.6</version>
-    <relativePath/>
-  </parent>
   <properties>
     <java.version>17</java.version>
+    <spring.boot.version>${SPRING_BOOT_VERSION}</spring.boot.version>
   </properties>
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${SPRING_BOOT_VERSION}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -41,6 +53,15 @@ cat > pom.xml <<'POM'
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.11.0</version>
+        <configuration>
+          <source>${java.version}</source>
+          <target>${java.version}</target>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
@@ -48,48 +69,20 @@ cat > pom.xml <<'POM'
   </build>
 </project>
 POM
-mkdir -p src/main/java/org/example src/main/resources src/test/java/org/example
-cat > src/main/java/org/example/Application.java <<'JAVA'
-package org.example;
+# Create minimal Application.java if no Java sources exist
+if [ -z "$(ls -A src/main/java 2>/dev/null || true)" ]; then
+  PKG_DIR=src/main/java/dev/container
+  mkdir -p "$PKG_DIR"
+  cat > "$PKG_DIR/Application.java" <<'JAVA'
+package dev.container;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+
 @SpringBootApplication
-public class Application { public static void main(String[] args){ SpringApplication.run(Application.class,args);} }
+public class Application {
+  public static void main(String[] args) {
+    SpringApplication.run(Application.class, args);
+  }
+}
 JAVA
-cat > src/main/java/org/example/HealthController.java <<'JAVA'
-package org.example;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-import java.util.Map;
-@RestController
-public class HealthController { @GetMapping("/health") public Map<String,String> health(){ return Map.of("status","UP"); } }
-JAVA
-# application-dev.properties: uses ${user.home} (Spring runtime) and server.port fallback
-cat > src/main/resources/application-dev.properties <<'PROP'
-spring.datasource.url=${DATABASE_URL:jdbc:h2:file:${user.home}/.local/share/spring_backend_dev;DB_CLOSE_ON_EXIT=FALSE}
-spring.datasource.driverClassName=org.h2.Driver
-spring.h2.console.enabled=true
-management.endpoints.web.exposure.include=health,info
-management.endpoint.health.show-details=always
-logging.level.root=INFO
-server.port=${SERVER_PORT:8080}
-PROP
-cat > src/test/java/org/example/ApplicationTest.java <<'TEST'
-package org.example;
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-class ApplicationTest { @Test void sanity(){ assertTrue(true); } }
-TEST
-# Uploads dir: deterministic ownership strategy
-mkdir -p "$WS/uploads"
-if [ "$(id -u)" -ne 0 ]; then
-  # running as non-root inside container: ensure writable
-  chmod 0777 "$WS/uploads" || true
-else
-  # if RUN_AS_USER provided, chown; otherwise leave permissive for dev
-  if [ -n "${RUN_AS_USER:-}" ] && id -u "${RUN_AS_USER}" >/dev/null 2>&1; then
-    sudo chown -R "${RUN_AS_USER}:${RUN_AS_USER}" "$WS/uploads" || true
-  else
-    sudo chmod 0777 "$WS/uploads" || true
-  fi
 fi
